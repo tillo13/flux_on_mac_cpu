@@ -5,3 +5,5 @@ accelerate
 requests
 tqdm
 psutil
+sentencepiece
+protobuf
