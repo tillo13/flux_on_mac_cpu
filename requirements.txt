@@ -1,0 +1,7 @@
+torch
+diffusers
+transformers
+accelerate
+requests
+tqdm
+psutil
