@@ -25,9 +25,9 @@ if HF_TOKEN is None:
 login(token=HF_TOKEN)  
   
 # GLOBAL VARIABLES  
-PROMPT = "a cat dressed as deadpool holding a sign with clear writing stating: How about that Flux, Andy?"  
+PROMPT = "a cat dressed as deadpool holding a sign saying: Ain't Flux neat, Andy?"  
 MODEL_ID = "black-forest-labs/FLUX.1-dev"  # Use the dev version of the model  
-NUMBER_OF_INFERENCE_STEPS = 5 
+NUMBER_OF_INFERENCE_STEPS = 1
 CSV_FILENAME = "runtime_logs.csv"  
 SEED = 42  
 RANDOMIZE_SEED = True  
@@ -35,6 +35,7 @@ MAX_SEQUENCE_LENGTH = 512
 GUIDANCE_SCALE = 3.5  
 HEIGHT = 1024  
 WIDTH = 1024  
+NUMBER_OF_LOOPS = 50  # Default number of images to generate  
   
 # Ensure necessary packages are installed  
 def ensure_packages():  
@@ -63,9 +64,7 @@ def time_function(function, *args, **kwargs):
 # Create required directories  
 def create_directories():  
     print("Creating directories...")  
-    directories = [  
-        "generated_images"  
-    ]  
+    directories = ["generated_images"]  
     for directory in directories:  
         if not os.path.exists(directory):  
             os.makedirs(directory)  
@@ -102,11 +101,9 @@ def main():
     # Print out the device being used  
     print(f"Using device: {device}")  
     create_dirs_result, create_dirs_time = time_function(create_directories)  
-    # Determine seed value  
-    if RANDOMIZE_SEED:  
-        seed = random.randint(0, 1000000)  
-    else:  
-        seed = SEED  
+    # Set initial seed value  
+    seed = SEED  
+  
     try:  
         print("Loading model...")  
         start_time = time.time()  
@@ -120,38 +117,51 @@ def main():
             pbar.update(100)  
         load_pipeline_time = time.time() - start_time  
         print(f"Load pipeline runtime: {load_pipeline_time:.2f} seconds")  
-        generator = torch.manual_seed(seed)  
-        print("Generating image...")  
-        start_time = time.time()  
-        # Generate image  
-        image = pipe(  
-            prompt=PROMPT,  
-            height=HEIGHT,  
-            width=WIDTH,  
-            guidance_scale=GUIDANCE_SCALE,  
-            output_type="pil",  
-            num_inference_steps=NUMBER_OF_INFERENCE_STEPS,  
-            max_sequence_length=MAX_SEQUENCE_LENGTH,  
-            generator=generator  
-        )["images"][0]  
-        generate_image_time = time.time() - start_time  
-        print(f"Generate image runtime: {generate_image_time:.2f} seconds")  
-        start_time = time.time()  
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")  
-        image_path = os.path.join("generated_images", f"{timestamp}_flux_creation.png")  
-        image.save(image_path)  
-        save_image_time = time.time() - start_time  
-        print(f"Image saved as '{image_path}'")  
-        print(f"Save image runtime: {save_image_time:.2f} seconds")  
+  
+        total_generate_image_time = 0  
+        total_save_image_time = 0  
+  
+        for i in range(NUMBER_OF_LOOPS):  
+            # Randomize seed if necessary  
+            if RANDOMIZE_SEED:  
+                seed = random.randint(0, 1000000)  
+            generator = torch.manual_seed(seed)  
+            print(f"Generating image {i+1}/{NUMBER_OF_LOOPS} with seed {seed}...")  
+            start_time = time.time()  
+            # Generate image  
+            image = pipe(  
+                prompt=PROMPT,  
+                height=HEIGHT,  
+                width=WIDTH,  
+                guidance_scale=GUIDANCE_SCALE,  
+                output_type="pil",  
+                num_inference_steps=NUMBER_OF_INFERENCE_STEPS,  
+                max_sequence_length=MAX_SEQUENCE_LENGTH,  
+                generator=generator  
+            )["images"][0]  
+            generate_image_time = time.time() - start_time  
+            print(f"Generate image {i+1}/{NUMBER_OF_LOOPS} runtime: {generate_image_time:.2f} seconds")  
+            total_generate_image_time += generate_image_time  
+  
+            start_time = time.time()  
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")  
+            image_path = os.path.join("generated_images", f"{timestamp}_flux_creation_{i+1}.png")  
+            image.save(image_path)  
+            save_image_time = time.time() - start_time  
+            print(f"Image {i+1} saved as '{image_path}'")  
+            print(f"Save image {i+1}/{NUMBER_OF_LOOPS} runtime: {save_image_time:.2f} seconds")  
+            total_save_image_time += save_image_time  
+  
     except Exception as e:  
         print(f"An error occurred: {e}")  
         return  
-    total_time = create_dirs_time + load_pipeline_time + generate_image_time + save_image_time  
+  
+    total_time = create_dirs_time + load_pipeline_time + total_generate_image_time + total_save_image_time  
     print("\n=== SUMMARY ===")  
     print(f"create_directories runtime: {create_dirs_time:.2f} seconds")  
     print(f"Load pipeline runtime: {load_pipeline_time:.2f} seconds")  
-    print(f"Generate image runtime: {generate_image_time:.2f} seconds")  
-    print(f"Save image runtime: {save_image_time:.2f} seconds")  
+    print(f"Total generate image runtime: {total_generate_image_time:.2f} seconds")  
+    print(f"Total save image runtime: {total_save_image_time:.2f} seconds")  
     print(f"Total runtime: {total_time:.2f} seconds")  
     # Log the runtime and system info  
     system_info = get_system_info()  
@@ -159,13 +169,14 @@ def main():
         "timestamp": timestamp,  
         "create_directories_runtime": create_dirs_time,  
         "load_pipeline_runtime": load_pipeline_time,  
-        "generate_image_runtime": generate_image_time,  
-        "save_image_runtime": save_image_time,  
+        "total_generate_image_runtime": total_generate_image_time,  
+        "total_save_image_runtime": total_save_image_time,  
         "total_runtime": total_time,  
         "prompt": PROMPT,  
         "num_inference_steps": NUMBER_OF_INFERENCE_STEPS,  
         "model_id": MODEL_ID,  
         "seed": seed,  
+        "number_of_loops": NUMBER_OF_LOOPS,  
         **system_info  
     }  
     log_to_csv(log_data)  
